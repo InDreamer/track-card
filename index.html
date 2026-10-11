@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>运动轨迹卡片生成器 · Route Card Studio</title>
+<style>
+  :root{
+    --bg:#f3f4f6; --panel:#ffffff; --line:#e5e7eb; --txt:#111827; --sub:#6b7280;
+    --brand:#00c66b; --brand-ink:#04361f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font:14px/1.5 -apple-system,"PingFang SC","Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC",sans-serif;
+    background:var(--bg); color:var(--txt); -webkit-font-smoothing:antialiased;
+  }
+  .app{display:flex;height:100%;align-items:stretch}
+
+  /* ============ 左侧控制台 ============ */
+  aside{
+    width:344px;flex:0 0 344px;background:var(--panel);border-right:1px solid var(--line);
+    overflow-y:auto;padding:18px 18px 40px;
+  }
+  aside h1{font-size:16px;margin:0 0 2px;letter-spacing:.2px}
+  aside .tag{font-size:12px;color:var(--sub);margin:0 0 16px}
+  fieldset{border:0;padding:0;margin:0 0 16px}
+  legend{font-size:11px;font-weight:700;color:var(--sub);letter-spacing:.08em;text-transform:uppercase;padding:0 0 8px}
+  label{display:block;font-size:12px;color:var(--sub);margin:0 0 4px}
+  input,select,button{font:inherit;color:inherit}
+  input[type=text],input[type=number],input[type=date],input[type=time],select{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px;
+  }
+  input:focus,select:focus{outline:2px solid rgba(0,198,107,.35);outline-offset:-1px;border-color:var(--brand)}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1;min-width:0}
+  .f{margin-bottom:10px}
+  button{
+    padding:9px 12px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;font-size:13px;
+    transition:.12s;
+  }
+  button:hover{background:#f9fafb}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+  button.primary:hover{filter:brightness(1.05);background:var(--brand)}
+  .hint{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.5}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{flex:1;padding:7px 4px;font-size:12px;white-space:nowrap}
+  .seg button[aria-pressed=true]{background:#e9fbf2;border-color:var(--brand);color:#067647;font-weight:600}
+  .hits{border:1px solid var(--line);border-radius:8px;margin-top:6px;max-height:168px;overflow:auto;display:none}
+  .hits.on{display:block}
+  .hits div{padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f1f2f4}
+  .hits div:last-child{border-bottom:0}
+  .hits div:hover{background:#f6fdf9}
+  .stat{font-size:11px;color:var(--sub);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+  .stat b{color:var(--txt);font-weight:600}
+  .ck{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt);margin:8px 0}
+  .ck input{width:auto}
+
+  /* ============ 右侧预览 ============ */
+  main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .bar{
+    display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);
+    background:var(--panel);font-size:12px;color:var(--sub)
+  }
+  .bar .grow{flex:1}
+  .bar .pill{background:#f3f4f6;border-radius:99px;padding:4px 10px}
+  .stage{flex:1;overflow:auto;padding:26px;display:flex;justify-content:center;align-items:flex-start}
+  #card{
+    width:658px;max-width:100%;height:auto;display:block;border-radius:14px;
+    box-shadow:0 10px 34px rgba(15,23,42,.16),0 2px 6px rgba(15,23,42,.08);
+    background:#fff;
+  }
+  .dropping{outline:3px dashed var(--brand);outline-offset:6px}
+  svg.i{width:1em;height:1em;vertical-align:-.12em}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>运动轨迹卡片生成器</h1>
+    <p class="tag">真实卫星底图 · 程序生成轨迹与运动数据 · 一键导出 PNG</p>
+
+    <fieldset>
+      <legend>地点</legend>
+      <div class="f">
+        <input id="q" type="text" placeholder="搜索地点，例如：温州 白龙山 / 杭州西湖">
+        <div class="hits" id="hits"></div>
+        <div class="hint">也可以直接在右侧地图上拖动定位、滚轮缩放。</div>
+      </div>
+      <div class="f row">
+        <div><label>纬度 lat</label><input id="lat" type="number" step="0.0001" value="28.0210"></div>
+        <div><label>经度 lng</label><input id="lng" type="number" step="0.0001" value="120.8150"></div>
+      </div>
+      <div class="f"><label>卡片城市名（留空自动取搜索名）</label><input id="city" type="text" placeholder="温州市"></div>
+      <div class="f row">
+        <div><label>缩放</label>
+          <select id="zoomSel">
+            <option value="auto" selected>自动适配轨迹</option>
+            <option value="13">z13 城郊</option>
+            <option value="14">z14 乡镇</option>
+            <option value="15">z15 村道</option>
+            <option value="16">z16 小径</option>
+          </select>
+        </div>
+        <div><label>底图</label>
+          <select id="basemap">
+            <option value="google-s">Google 卫星（全球）</option>
+            <option value="amap-s">高德 卫星（国内清晰）</option>
+            <option value="amap-label" selected>高德 卫星 + 注记（带地名）</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>地图地名标注</legend>
+      <div class="f row">
+        <div><button id="geoNames" style="width:100%">按位置自动反查地名</button></div>
+      </div>
+      <div class="f row">
+        <div><label>上方</label><input id="labTop" type="text" placeholder="（可留空）"></div>
+        <div><label>中部</label><input id="labMid" type="text" placeholder="（可留空）"></div>
+      </div>
+      <div class="f row">
+        <div><label>左下水系/道路</label><input id="labBot" type="text" placeholder="（可留空）"></div>
+        <div><label>右下水系/道路</label><input id="labBot2" type="text" placeholder="（可留空）"></div>
+      </div>
+      <div class="hint">从 OpenStreetMap 真实地物反查，留空则不显示该标签。</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>运动</legend>
+      <div class="f seg" id="sport">
+        <button data-v="hike" aria-pressed="true">徒步</button>
+        <button data-v="run">跑步</button>
+        <button data-v="walk">健走</button>
+        <button data-v="ride">骑行</button>
+      </div>
+      <input type="hidden" id="sportState" value="hike">
+      <div class="f row">
+        <div><label>目标距离 km</label><input id="dist" type="number" step="0.01" value="13.85"></div>
+        <div><label>目标时长（可选）</label><input id="dur" type="text" value="04:44:50"></div>
+      </div>
+      <div class="f row">
+        <div><label>随机种子</label><input id="seed" type="text" value="1024"></div>
+        <div style="flex:0 0 84px;display:flex;align-items:flex-end"><button id="reroll" style="width:100%">换一条</button></div>
+      </div>
+      <div class="f">
+        <label>轨迹形状倾向</label>
+        <select id="shape">
+          <option value="loop">环线（回到起点）</option>
+          <option value="lollipop">棒棒糖（去一段再绕回来）</option>
+          <option value="p2p">两点之间（不闭合）</option>
+        </select>
+      </div>
+      <div class="f">
+        <label>爬升强度 <span id="climbV" style="float:right;color:#374151"></span></label>
+        <input id="climb" type="range" min="0" max="100" value="55" style="width:100%">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>账号与文案</legend>
+      <div class="f"><label>昵称</label><input id="user" type="text" placeholder="你的昵称"></div>
+      <div class="f row">
+        <div><label>日期</label><input id="date" type="date"></div>
+        <div><label>开始时间</label><input id="time" type="time" value="08:10"></div>
+      </div>
+      <div class="f row">
+        <div><label>天气</label><input id="wtext" type="text" value="阴"></div>
+        <div><label>气温 ℃</label><input id="wtemp" type="number" value="18"></div>
+      </div>
+      <div class="ck"><input id="showPB" type="checkbox" checked><label for="showPB" style="margin:0">显示右上角 PB 徽章</label></div>
+      <div class="f" style="margin-top:8px"><label>PB 文案</label><input id="pbtxt" type="text" value="最长时间 · 新纪录"></div>
+      <div class="ck"><input id="showBar" type="checkbox" checked><label for="showBar" style="margin:0">显示底部「发布动态」条</label></div>
+      <div class="f"><label>笔记来源水印</label><input id="noteId" type="text" placeholder="留空则不绘制"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>导出</legend>
+      <div class="f row">
+        <div><label>像素倍率</label>
+          <select id="px">
+            <option value="2">2x · 1316px</option>
+            <option value="3" selected>3x · 1974px</option>
+            <option value="4">4x · 2632px</option>
+          </select>
+        </div>
+        <div style="flex:0 0 120px;display:flex;align-items:flex-end"><button id="png" class="primary" style="width:100%">导出 PNG</button></div>
+      </div>
+      <button id="copy" style="width:100%">复制配置分享链接</button>
+      <div class="stat" id="stat">就绪</div>
+    </fieldset>
+  </aside>
+
+  <main>
+    <div class="bar">
+      <span class="pill" id="pillBase">底图：Google 卫星</span>
+      <span class="pill" id="pillTile">瓦片 0</span>
+      <span class="grow"></span>
+      <span>拖动地图可换位置 · 滚轮缩放</span>
+    </div>
+    <div class="stage" id="stage"><canvas id="card" width="1974" height="4248"></canvas></div>
+  </main>
+</div>
+
+<script>
+/* ============================================================================
+ * 运动轨迹卡片生成器
+ *  - 底图：真实卫星瓦片（跨域带上 CORS 头，可安全导出 canvas）
+ *  - 轨迹：多倍频极坐标噪声生成有机环线 + Catmull-Rom 平滑 + 迭代匹配目标距离
+ *  - 数据：地形决定坡度 → 坡度决定速度 → 积分出时长 → 再推导步数/消耗/负荷
+ * ==========================================================================*/
+
+const W = 658;            // 卡片逻辑宽度（CSS px）
+const H = 1417;           // 卡片逻辑高度
+
+/* ---------- 画布 ---------- */
+const cv  = document.getElementById('card');
+const ctx = cv.getContext('2d');
+
+/* ---------- 随机数（可复现） ---------- */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashSeed(str){
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+let RND = mulberry32(1024);
+
+/* ---------- 值噪声 ---------- */
+function hash2(x, y, s){
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(s | 0, 2246822519);
+  h = Math.imul(h ^ h >>> 13, 1274126177);
+  return ((h ^ h >>> 16) >>> 0) / 4294967296;
+}
+const smooth = t => t * t * (3 - 2 * t);
+function noise2(x, y, s){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const tx = smooth(x - xi), ty = smooth(y - yi);
+  const a = hash2(xi, yi, s),     b = hash2(xi + 1, yi, s);
+  const c = hash2(xi, yi + 1, s), d = hash2(xi + 1, yi + 1, s);
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+function fbm(x, y, s, oct = 4){
+  let v = 0, amp = .5, f = 1;
+  for (let i = 0; i < oct; i++){ v += amp * noise2(x * f, y * f, s + i * 37); amp *= .5; f *= 2; }
+  return v;
+}
+
+/* ---------- 地理工具 ---------- */
+const R = 6371008.8, D2R = Math.PI / 180;
+function mercY(lat){ return Math.log(Math.tan(Math.PI / 4 + lat * D2R / 2)); }
+function unMercY(y){ return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) / D2R; }
+function haversine(a, b){
+  const dLat = (b.lat - a.lat) * D2R, dLng = (b.lng - a.lng) * D2R;
+  const s1 = Math.sin(dLat / 2), s2 = Math.sin(dLng / 2);
+  const h = s1 * s1 + Math.cos(a.lat * D2R) * Math.cos(b.lat * D2R) * s2 * s2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+/** 在 (lat,lng) 处按米偏移，返回新坐标 */
+function offset(lat, lng, east, north){
+  return {
+    lat: lat + (north / R) / D2R,
+    lng: lng + (east / (R * Math.cos(lat * D2R))) / D2R
+  };
+}
+
+/* ---------- Catmull-Rom：把稀疏顶点变成光滑轨迹 ---------- */
+function catmullRom(pts, t){                    // t ∈ [0, pts.length)
+  const n = pts.length;
+  const i1 = Math.floor(t) % n, i0 = (i1 - 1 + n) % n, i2 = (i1 + 1) % n, i3 = (i1 + 2) % n;
+  const u = t - Math.floor(t), u2 = u * u, u3 = u2 * u;
+  const p = (k) => pts[i1][k] * (2 * u3 - 3 * u2 + 1)
+                 + pts[i2][k] * (-2 * u3 + 3 * u2)
+                 + (pts[i2][k] - pts[i0][k]) * .5 * (u3 - 2 * u2 + u)
+                 + (pts[i3][k] - pts[i1][k]) * .5 * (u3 - u2);
+  return [p(0), p(1)];
+}
+
+/* ============================================================================
+ * 轨迹生成
+ * ==========================================================================*/
+function buildTrack(o){
+  const seed = o.seedNum;
+  const rnd  = mulberry32(seed);
+  const targetM = o.distKm * 1000;
+  const shape = o.shape;
+
+  // 1) 极坐标噪声环线（单位半径）
+  const N = 256;
+  const nOff = [];
+  for (let i = 0; i < 6; i++) nOff.push(rnd() * 1000);
+
+  const unit = [];
+  for (let i = 0; i < N; i++){
+    const a = i / N * Math.PI * 2;
+    let r = 1
+      + .30 * (noise2(Math.cos(a) * 1.1 + nOff[0], Math.sin(a) * 1.1 + nOff[1], 11, ) - .5) * 2
+      + .16 * (noise2(Math.cos(a) * 2.6 + nOff[2], Math.sin(a) * 2.6 + nOff[3], 23) - .5) * 2
+      + .07 * (noise2(Math.cos(a) * 5.5 + nOff[4], Math.sin(a) * 5.5 + nOff[5], 47) - .5) * 2;
+    r = Math.max(.42, r);
+    unit.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+
+  // 2) 形状变体（全部先做成"单位量级"的平面折线）
+  let verts = unit.slice();
+  let closed = shape !== 'p2p';
+  if (shape === 'lollipop'){
+    // 一段接近直线的去程 + 尾部的环
+    const ang = rnd() * Math.PI * 2, len = .9 + rnd() * .5;
+    const tx = Math.cos(ang), ty = Math.sin(ang);
+    const lolli = [];
+    for (let si = 1; si <= 26; si++){
+      const q = si / 26;
+      const w = (noise2(q * 4 + nOff[0], nOff[1], 61) - .5) * .18;
+      lolli.push([tx * len * q - ty * w, ty * len * q + tx * w]);
+    }
+    verts = lolli.concat(unit);
+    closed = false;
+  } else if (shape === 'p2p'){
+    // 一条带横向摆动的通路（起终点不同）
+    const ang = rnd() * Math.PI * 2, dir = rnd() < .5 ? 1 : -1;
+    const tx = Math.cos(ang), ty = Math.sin(ang);
+    const line = [];
+    for (let si = 0; si <= 40; si++){
+      const q = si / 40;
+      const w = dir * (noise2(q * 3.2 + nOff[2], nOff[3], 83) - .5) * .55
+              + dir * (noise2(q * 8.5 + nOff[4], nOff[5], 91) - .5) * .16;
+      line.push([tx * q - ty * w, ty * q + tx * w]);
+    }
+    verts = line;
+    closed = false;
+  }
+
+  // 3) 把折线长度缩放到目标距离
+  const perimeter = (arr, isClosed) => {
+    let L = 0;
+    const n = arr.length;
+    const last = isClosed ? n : n - 1;
+    for (let i = 0; i < last; i++){
+      const a = arr[i], b = arr[(i + 1) % n];
+      L += Math.hypot(b[0] - a[0], b[1] - a[1]);
+    }
+    return L;
+  };
+  for (let it = 0; it < 5; it++){
+    const L = perimeter(verts, closed);
+    if (!(L > 1e-9)) break;
+    const k = targetM / L;
+    verts = verts.map(q => [q[0] * k, q[1] * k]);
+  }
+
+  // 4) 平滑采样（Catmull-Rom 穿过控制点，等比采样）
+  const M = closed ? 1400 : 1100;
+  const loopPts = closed ? verts : verts.concat([verts[verts.length - 1]]);
+  const span = closed ? verts.length : verts.length - 1.0002;
+  const pts = [];
+  for (let i = 0; i <= M; i++){
+    const q = catmullRom(loopPts, i / M * span);
+    pts.push({ x: q[0], y: q[1] });
+  }
+  // 转成真实经纬度：平面米 → 度（用起点纬度做局部等距投影）
+  const proto = pts.map(q => offset(o.lat, o.lng, q.x, q.y));
+
+  // 5) 实际距离
+  let distM = 0;
+  const segM = [];
+  for (let i = 1; i < proto.length; i++){
+    const d = haversine(proto[i - 1], proto[i]);
+    segM.push(d); distM += d;
+  }
+
+  // 6) 地形高程（与地理坐标绑定，换地点纹理一致）
+  const terrainSeed = seed % 9973;
+  const rough = 0.30 + o.climb / 100 * 0.72;
+  const elev = proto.map(p => {
+    const v = fbm(p.lng * 260, p.lat * 320, terrainSeed, 5);
+    const v2 = fbm(p.lng * 900 + 13, p.lat * 1050, terrainSeed + 5, 3);
+    return (v * .78 + v2 * .22) * rough * 219;
+  });
+  // 轻微平滑，避免噪声尖刺
+  for (let pass = 0; pass < 2; pass++){
+    for (let i = 1; i < elev.length - 1; i++) elev[i] = (elev[i - 1] + elev[i] * 2 + elev[i + 1]) / 4;
+  }
+  let gain = 0;
+  for (let i = 1; i < elev.length; i++) if (elev[i] > elev[i - 1]) gain += elev[i] - elev[i - 1];
+
+  // 7) 速度：坡度越陡越慢
+  const baseSpeed = { hike: 0.90, walk: 1.25, run: 2.70, ride: 5.40 }[o.sport] || 0.90;
+  const speedUp  = e => 1 + (e / 100) * 1.9;               // 上坡减速
+  const speedDn  = e => 1 + (-e / 100) * 0.55;             // 下坡略快
+  const rawV = [];
+  for (let i = 1; i < proto.length; i++){
+    const grade = segM[i - 1] > .2 ? (elev[i] - elev[i - 1]) / segM[i - 1] * 100
+                                   : (elev[i] - elev[i - 1]) / .2 * 100;
+    const g = Math.max(-30, Math.min(45, grade));
+    let mult = g > 0 ? speedUp(g) : speedDn(-g);
+    mult *= .82 + noise2(proto[i].lng * 1800, proto[i].lat * 2100, seed % 777, 2) * .42;
+    rawV.push(baseSpeed / mult);
+  }
+  for (let pass = 0; pass < 24; pass++)
+    for (let i = 1; i < rawV.length - 1; i++) rawV[i] = (rawV[i - 1] + rawV[i] * 2 + rawV[i + 1]) / 4;
+  // 分段整体起伏（模拟走走停停、拍照休息）
+  for (let i = 0; i < rawV.length; i++){
+    const w = .86 + fbm(i / rawV.length * 9, seed % 311, 71, 3) * .34;
+    rawV[i] = Math.max(.18, rawV[i] * w);
+  }
+
+  let secs = 0;
+  for (let i = 0; i < rawV.length; i++) secs += segM[i] / rawV[i];
+  const timeScale = o.durSec ? o.durSec / secs : 1;    // 指定目标时长则整体缩放配速
+  if (o.durSec) secs = o.durSec;
+
+  // 8) 分段耗时 / 累计
+  const cumT = [0];
+  for (let i = 0; i < rawV.length; i++) cumT.push(cumT[i] + segM[i] / rawV[i] * timeScale);
+  const durSec = cumT[cumT.length - 1];
+
+  // 9) 其它数据
+  const surfSpeed = o.sport === 'ride' ? 1 : 0;
+  const stepRate = o.sport === 'hike' ? 1.56 : o.sport === 'walk' ? 1.70 : o.sport === 'run' ? 2.80 : 0;
+  let steps = 0;
+  for (let i = 0; i < rawV.length; i++){
+    const e1 = elev[Math.min(elev.length - 1, i + 1)];
+    const v = Math.max(.3, segM[i] / (cumT[i + 1] - cumT[i] || 1e9));
+    const cad = stepRate * (1 - Math.min(.42, (segM[i] > 0 ? Math.max(0, (e1 - elev[i]) / segM[i]) : 0) * 2.4));
+    steps += Math.max(0, cad) * (cumT[i + 1] - cumT[i]);
+  }
+  const avgSpeed = distM / durSec;
+  const metBase = { hike: 5.4, run: 9.8, walk: 3.9, ride: 6.8 }[o.sport] || 5.4;
+  const refMs = baseSpeed;
+  const metAdj = Math.max(.75, Math.min(1.6, 1 + (avgSpeed - refMs) / refMs * .45));
+  const kcal = Math.round(metBase * metAdj * o.weight * durSec / 3600);
+  const load = Math.round(durSec / 60 * (0.20 + metBase / 9 * .25) + gain / 30);
+
+  // 10) 平滑（按弧长等距重采样）
+  const out = [];
+  let acc = 0, j = 0;
+  for (let s = 0; s <= 1.00001; s += .001){
+    const D = s * distM;
+    while (j < segM.length - 1 && acc + segM[j] < D){ acc += segM[j]; j++; }
+    const f = segM[j] > .01 ? (D - acc) / segM[j] : 0;
+    const a = proto[j], b = proto[Math.min(proto.length - 1, j + 1)];
+    out.push({
+      lat: a.lat + (b.lat - a.lat) * f,
+      lng: a.lng + (b.lng - a.lng) * f,
+      t:   cumT[j] + (cumT[Math.min(cumT.length - 1, j + 1)] - cumT[j]) * f,
+      d:   D,
+      e:   elev[j] + (elev[Math.min(elev.length - 1, j + 1)] - elev[j]) * f
+    });
+  }
+  for (let i = 0; i < out.length; i++){
+    const before = Math.max(0, i - 14), after = Math.min(out.length - 1, i + 14);
+    const dt = out[after].t - out[before].t, dd = out[after].d - out[before].d;
+    out[i].v = dt > .5 ? dd / dt : avgSpeed;
+  }
+  return {
+    pts: out, distM, durSec, gain, steps: Math.round(steps), kcal, load,
+    avgSpeed, maxSpeed: Math.max(...out.map(p => p.v)), elev
+  };
+}
+
+/* ============================================================================
+ * 底图瓦片
+ * ==========================================================================*/
+/* 地图视口：世界像素坐标 */
+function makeView(lat, lng, zoom){
+  const scale = 256 * Math.pow(2, zoom);
+  const w = { x: (lng + 180) / 360 * scale, y: (0.5 - mercY(lat) / (2 * Math.PI)) * scale };
+  return {
+    zoom, scale, w,
+    toPx(p){ return { x: (p.lng + 180) / 360 * scale - w.x, y: (0.5 - mercY(p.lat) / (2 * Math.PI)) * scale - w.y }; },
+    toLL(q){ return { lng: (w.x + q.x) / scale * 360 - 180, lat: unMercY((0.5 - (w.y + q.y) / scale) * 2 * Math.PI) }; }
+  };
+}
+
+const PROVIDERS = {
+  'google-s': {
+    name: 'Google 卫星',
+    url: (x, y, z) => `https://mt${(x + y) % 4}.google.com/vt/lyrs=s&hl=zh-CN&x=${x}&y=${y}&z=${z}`,
+    max: 19
+  },
+  'amap-s': {
+    name: '高德 卫星',
+    url: (x, y, z) => `https://webst0${((x + y) % 4) + 1}.is.autonavi.com/appmaptile?style=6&x=${x}&y=${y}&z=${z}`,
+    max: 18
+  },
+  'amap-label': {
+    name: '高德 卫星+注记',
+    url: (x, y, z) => `https://webst0${((x + y) % 4) + 1}.is.autonavi.com/appmaptile?style=6&x=${x}&y=${y}&z=${z}`,
+    label: (x, y, z) => `https://wprd0${((x + y) % 4) + 1}.is.autonavi.com/appmaptile?x=${x}&y=${y}&z=${z}&lang=zh_cn&size=1&scl=1&style=8`,
+    max: 18
+  }
+};
+
+const tileCache = new Map();
+function loadTile(url){
+  if (tileCache.has(url)) return tileCache.get(url);
+  const p = new Promise((res, rej) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => res(img);
+    img.onerror = () => rej(new Error('tile fail'));
+    img.referrerPolicy = 'no-referrer';
+    img.src = url;
+  });
+  tileCache.set(url, p);
+  return p;
+}
+
+/* 画一张真实瓦片地图到 g，目标矩形 box（逻辑坐标） */
+async function drawBasemap(g, view, box, providerKey, onTile){
+  const prov = PROVIDERS[providerKey] || PROVIDERS['google-s'];
+  const z = Math.min(Math.round(view.zoom), prov.max);
+  const t = 256 * Math.pow(2, z);
+  const px = p => ({ x: (p.lng + 180) / 360 * t, y: (0.5 - mercY(p.lat) / (2 * Math.PI)) * t });
+  const a = px(view.toLL({ x: box.x, y: box.y }));
+  const b = px(view.toLL({ x: box.x + box.w, y: box.y + box.h }));
+  const x0 = Math.floor(a.x / 256), x1 = Math.floor(b.x / 256);
+  const y0 = Math.floor(a.y / 256), y1 = Math.floor(b.y / 256);
+  const nT = t / 256, k = Math.pow(2, view.zoom - z);
+  const jobs = [];
+  for (let x = x0; x <= x1; x++)
+    for (let y = y0; y <= y1; y++){
+      if (y < 0 || y >= nT) continue;
+      const wrap = ((x % nT) + nT) % nT;
+      // k 是「瓦片级别 → 视口级别」的倍率（>1 表示放大）：乘，不是除
+      jobs.push({
+        dx: x * 256 * k - view.w.x,
+        dy: y * 256 * k - view.w.y,
+        sz: 256 * k + .5,
+        url: prov.url(wrap, y, z),
+        lurl: prov.label ? prov.label(wrap, y, z) : null
+      });
+    }
+  if (jobs.length > 420) throw new Error('瓦片太多（' + jobs.length + '），请降低缩放或缩小距离');
+
+  g.save();
+  roundRect(g, box.x, box.y, box.w, box.h, 3); g.clip();
+  let done = 0;
+  await Promise.all(jobs.map(async j => {
+    try { const img = await loadTile(j.url); g.drawImage(img, j.dx, j.dy, j.sz + .7, j.sz + .7); done++; }
+    catch (e) { /* 单块失败忽略 */ }
+    if (j.lurl){
+      try {
+        const lab = await loadTile(j.lurl);
+        g.save(); g.globalCompositeOperation = 'multiply';   // 注记瓦片不透明，用 multiply 让卫星透出来
+        g.drawImage(lab, j.dx, j.dy, j.sz + .7, j.sz + .7);
+        g.restore();
+      } catch (e) {}
+    }
+    if (onTile) onTile(jobs.length, done);
+  }));
+  g.restore();
+  return { ok: done, total: jobs.length, z };
+}
+
+/* 无网络时的替代底图：等高线风格地形（画在 g 的 box 内） */
+function drawTerrainFallback(g, box){
+  const gd = g.createLinearGradient(0, box.y, 0, box.y + box.h);
+  gd.addColorStop(0, '#33513e'); gd.addColorStop(.6, '#25412f'); gd.addColorStop(1, '#1b3123');
+  g.save();
+  roundRect(g, box.x, box.y, box.w, box.h, 3); g.clip();
+  g.fillStyle = gd; g.fillRect(box.x, box.y, box.w, box.h);
+  const sd = 17;
+  for (let i = 0; i < 14000; i++){
+    const x = box.x + RND() * box.w, y = box.y + RND() * box.h;
+    const v = fbm(x / 78, y / 78, sd, 4);
+    g.fillStyle = `hsla(${112 + v * 42},${20 + v * 30}%,${12 + v * 24}%,${.45 + v * .45})`;
+    g.fillRect(x, y, 3.4, 3.4);
+  }
+  // 等高线
+  g.strokeStyle = 'rgba(255,255,255,.055)'; g.lineWidth = 1;
+  for (let k = 0; k < 26; k++){
+    const y0 = box.y + k / 26 * box.h;
+    g.beginPath();
+    for (let x = box.x; x <= box.x + box.w; x += 6)
+      g.lineTo(x, y0 + Math.sin(x / 60 + k) * 5 + fbm(x / 180, k * 2.3, sd, 3) * 22);
+    g.stroke();
+  }
+  g.restore();
+}
+
+/* ============================================================================
+ * 卡片绘制
+ * ==========================================================================*/
+const CARD = {
+  bg:'#ffffff', ink:'#0d0f12', sub:'#9aa3ad', sub2:'#5b6470',
+  line:'#eceff2', green:'#00c66b', greenDark:'#00a558',
+  fast:'#39e0c8', slow:'#1e93a8', red:'#ff3b30'
+};
+const FONT = (w, s, fallback) =>
+  `${w} ${s}px "PingFang SC","Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC",${fallback || 'sans-serif'}`;
+
+function fmtDuration(s){
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  const p = n => String(n).padStart(2, '0');
+  return `${p(h)}:${p(m)}:${p(x)}`;
+}
+function fmtDurationCN(s){
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? h + '小时' : '') + (h || m ? m + '分' : '') + x + '秒';
+}
+function speedColor(v){
+  const t = Math.max(0, Math.min(1, (v - .62) / .62));
+  const c1 = [30, 147, 168], c2 = [57, 224, 200];
+  return `rgb(${Math.round(c1[0] + (c2[0] - c1[0]) * t)},${Math.round(c1[1] + (c2[1] - c1[1]) * t)},${Math.round(c1[2] + (c2[2] - c1[2]) * t)})`;
+}
+function roundRect(c, x, y, w, h, r){
+  c.beginPath();
+  c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+/* 简易线性图标 */
+function iconPledge(c, x, y){                    // 隐私小锁
+  c.save(); c.strokeStyle = CARD.sub2; c.lineWidth = 1.8; c.lineJoin = 'round';
+  roundRect(c, x, y + 5.5, 13, 9.5, 2.6); c.stroke();
+  c.beginPath(); c.arc(x + 6.5, y + 5.5, 4, Math.PI, 0); c.stroke();
+  c.restore();
+}
+function iconShare(c, x, y){
+  c.save(); c.strokeStyle = CARD.sub2; c.lineWidth = 1.8; c.lineJoin = 'round'; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(x + 2.5, y + 11.5); c.lineTo(x + 2.5, y + 3.5);
+  c.moveTo(x - .8, y + 6.2); c.lineTo(x + 2.5, y + 2.8); c.lineTo(x + 5.8, y + 6.2); c.stroke();
+  c.beginPath(); c.moveTo(x - 1.6, y + 8.4); c.lineTo(x - 1.6, y + 13.2); c.lineTo(x + 6.6, y + 13.2); c.lineTo(x + 6.6, y + 8.4); c.stroke();
+  c.restore();
+}
+function iconDots(c, x, y){
+  c.save(); c.fillStyle = '#4b5563';
+  for (let i = 0; i < 3; i++){ c.beginPath(); c.arc(x + i * 5.4, y, 1.85, 0, 7); c.fill(); }
+  c.restore();
+}
+function iconHiker(c, x, y, color){
+  c.save(); c.fillStyle = color;
+  c.beginPath(); c.arc(x + 5.2, y + 1.6, 2.05, 0, 7); c.fill();
+  c.lineWidth = 2.4; c.lineCap = 'round'; c.strokeStyle = color;
+  c.beginPath(); c.moveTo(x + 5.2, y + 4.4); c.lineTo(x + 5.2, y + 9.2); c.stroke();
+  c.beginPath(); c.moveTo(x + 5.2, y + 9.2); c.lineTo(x + 2.4, y + 14); c.stroke();
+  c.beginPath(); c.moveTo(x + 5.2, y + 9.2); c.lineTo(x + 8.4, y + 14); c.stroke();
+  c.beginPath(); c.moveTo(x + 1.2, y + 8.6); c.lineTo(x + 9.6, y + 5.4); c.lineWidth = 2; c.stroke();
+  c.restore();
+}
+function iconStopwatch(c, x, y, color){
+  c.save(); c.strokeStyle = color; c.lineWidth = 2; c.lineJoin = 'round';
+  c.beginPath(); c.arc(x + 7, y + 8.6, 5.1, 0, 7); c.stroke();
+  c.beginPath(); c.moveTo(x + 5.4, y + .9); c.lineTo(x + 8.6, y + .9); c.stroke();
+  c.beginPath(); c.moveTo(x + 7, y + 3.1); c.lineTo(x + 7, y + 5.4); c.stroke();
+  c.restore();
+}
+
+function drawCard(o, track, view, tileInfo){
+  ctx.save();
+  ctx.textBaseline = 'alphabetic';
+  /* ---- 顶部状态栏（模拟手机截图） ---- */
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#111'; ctx.font = '600 15px ui-sans-serif,system-ui,sans-serif';
+  ctx.fillText('07:27', 22, 34);
+  const sy = 27;
+  // 运营商双信号
+  ctx.save();
+  ctx.fillStyle = '#f59e0b';
+  roundRect(ctx, 88, sy - 7, 15, 11, 3); ctx.fill();
+  ctx.fillStyle = '#22c55e';
+  roundRect(ctx, 106, sy - 7, 15, 11, 3); ctx.fill();
+  ctx.fillStyle = '#f59e0b';
+  roundRect(ctx, 124, sy - 7, 15, 11, 3); ctx.fill();
+  ctx.restore();
+  // NFC
+  ctx.save(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  for (let i = 0; i < 3; i++){ ctx.beginPath(); ctx.arc(396, 27, 3 + i * 2.6, -1.05, 1.05); ctx.stroke(); }
+  ctx.restore();
+  // 闹钟
+  ctx.save(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1.9;
+  ctx.beginPath(); ctx.arc(436, 27, 6.4, 0, 7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(434, 22); ctx.lineTo(434, 27); ctx.lineTo(439, 29); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(431, 19.4); ctx.lineTo(436, 16.6); ctx.moveTo(441, 19.4); ctx.lineTo(436, 16.6); ctx.stroke();
+  ctx.restore();
+  // 静音
+  ctx.save(); ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.moveTo(462, 28); ctx.lineTo(466, 28); ctx.lineTo(470, 24.6); ctx.lineTo(470, 31.4); ctx.lineTo(466, 28); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1.7;
+  ctx.beginPath(); ctx.moveTo(473.5, 24.5); ctx.lineTo(478.5, 31.5); ctx.moveTo(478.5, 24.5); ctx.lineTo(473.5, 31.5); ctx.stroke();
+  ctx.restore();
+  // wifi
+  ctx.save(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1.9; ctx.lineCap = 'round';
+  for (let i = 0; i < 3; i++){ ctx.beginPath(); ctx.arc(502, 33, 2.6 + i * 4.2, -2.35, -.79); ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(502, 33.4, 1.5, 0, 7); ctx.fillStyle = '#111'; ctx.fill();
+  ctx.restore();
+  // 信号格
+  ctx.save(); ctx.fillStyle = '#111';
+  for (let i = 0; i < 4; i++) ctx.fillRect(523 + i * 5.6, 30 - i * 2.4, 3.6, 8 + i * 2.4);
+  ctx.restore();
+  // 电池
+  ctx.save();
+  roundRect(ctx, 552, 21, 26, 12.5, 3.4); ctx.strokeStyle = 'rgba(0,0,0,.38)'; ctx.lineWidth = 1.2; ctx.stroke();
+  roundRect(ctx, 554, 23, 20.5, 8.5, 2.2); ctx.fillStyle = '#111'; ctx.fill();
+  roundRect(ctx, 579.6, 24.6, 2.4, 5.6, 1.2); ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '700 8px ui-sans-serif,sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('93', 564, 30.6); ctx.textAlign = 'left';
+  ctx.restore();
+
+  /* ---- 标题栏 ---- */
+  const HDR = 45;
+  ctx.save(); ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 2.1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(26, HDR + 20); ctx.lineTo(15, HDR + 29); ctx.lineTo(26, HDR + 38); ctx.stroke();
+  ctx.restore();
+  // 隐私胶囊
+  roundRect(ctx, 376, HDR + 10, 76, 36, 18); ctx.fillStyle = '#f1f3f5'; ctx.fill();
+  iconPledge(ctx, 394, HDR + 21);
+  ctx.fillStyle = CARD.ink; ctx.font = FONT(500, 16); ctx.fillText('隐私', 414, HDR + 34);
+  iconShare(ctx, 470, HDR + 20);
+  iconDots(ctx, 528, HDR + 28);
+
+  /* ---- 作者行 ---- */
+  const AUTH = 108;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(44, AUTH + 21, 21, 0, 7); ctx.closePath();
+  ctx.fillStyle = '#fff2dd'; ctx.fill();
+  ctx.save(); ctx.clip();
+  // 卡通头像：草帽 + 脸 + 头发
+  ctx.fillStyle = '#f7d9b8'; ctx.beginPath(); ctx.arc(44, AUTH + 25, 15.5, 0, 7); ctx.fill();
+  ctx.fillStyle = '#3b2a22'; ctx.beginPath(); ctx.arc(44, AUTH + 19, 16, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+  ctx.fillRect(26, AUTH + 15, 9, 15); ctx.fillRect(53, AUTH + 15, 9, 15);
+  ctx.fillStyle = '#e8c48c';
+  ctx.beginPath(); ctx.ellipse(44, AUTH + 5, 17.5, 9, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(44, AUTH + 1.5, 10, 7.5, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2b2b2b';
+  ctx.beginPath(); ctx.arc(38.5, AUTH + 26, 1.6, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(50, AUTH + 26, 1.6, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(44, AUTH + 31, 4.4, .15 * Math.PI, .85 * Math.PI); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+
+  ctx.fillStyle = CARD.ink; ctx.font = FONT(500, 19);
+  ctx.fillText(o.user || '运动爱好者', 77, AUTH + 15);
+  ctx.fillStyle = CARD.sub; ctx.font = FONT(400, 14);
+  const meta = `${o.dateText}  ${o.timeText} ${o.city || ''} · ${o.weather} · ${o.temp}℃`;
+  ctx.fillText(meta.trim(), 77, AUTH + 38);
+
+  /* ---- 运动类型 ---- */
+  const SPORT_NAME = { hike:'徒步', run:'跑步', walk:'健走', ride:'骑行' };
+  const TY = 168;
+  iconHiker(ctx, 26, TY - 9, CARD.ink);
+  ctx.fillStyle = CARD.ink; ctx.font = FONT(700, 22);
+  ctx.fillText(SPORT_NAME[o.sport] || '徒步', 55, TY + 14);
+
+  /* ---- 大数字 ---- */
+  const BIG = 258;
+  ctx.fillStyle = CARD.ink; ctx.font = '800 82px "Helvetica Neue",Arial,sans-serif';
+  const distStr = (track.distM / 1000).toFixed(2);
+  ctx.fillText(distStr, 26, BIG + 22);
+  const dw = ctx.measureText(distStr).width;
+  ctx.font = FONT(600, 24); ctx.fillStyle = CARD.sub2;
+  ctx.fillText('公里', 26 + dw + 10, BIG + 22);
+
+  /* ---- PB 徽章 ---- */
+  if (o.showPB){
+  const cx = 546, cy = 228;
+    ctx.save();
+    ctx.strokeStyle = '#f0c96b'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    const leaf = (a0, sign) => {
+      for (let i = 0; i < 5; i++){
+        const a = a0 + sign * i * .27, rr = 41 + i * 1.4;
+        const bx = cx + Math.cos(a) * rr, by = cy + Math.sin(a) * rr;
+        ctx.beginPath();
+        ctx.ellipse(bx, by, 9, 4.6, a + sign * 1.1, 0, 7);
+        ctx.stroke();
+      }
+    };
+    leaf(2.5, 1); leaf(3.78, -1);
+    ctx.restore();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8b23c'; ctx.font = '800 27px "Helvetica Neue",Arial,sans-serif';
+    ctx.fillText('PB', cx, cy - 12);
+    ctx.fillStyle = '#c9a14a'; ctx.font = FONT(500, 12.5);
+    ctx.fillText(o.pbText || '最长时间 · 新纪录', cx, cy + 6);
+    // 成绩胶囊
+    roundRect(ctx, cx - 62, cy + 20, 124, 30, 5); ctx.fillStyle = '#f6d99a'; ctx.fill();
+    ctx.fillStyle = '#7a5a13'; ctx.font = '700 16px "Helvetica Neue",Arial,sans-serif';
+    ctx.fillText('成绩 ' + fmtDuration(track.durSec), cx, cy + 41);
+    ctx.textAlign = 'left';
+  }
+
+  /* ---- 地图 ---- */
+  const MAP = { y: 392, h: 512 };
+  if (!(tileInfo && tileInfo.ok > 0)) drawTerrainFallback(ctx, { x: 18, y: MAP.y, w: W - 36, h: MAP.h });
+
+  /* 轨迹 */
+  const path = track.pts.map(p => view.toPx(p));   // 已是图框内坐标
+  const inner = { x: 18, y: MAP.y, w: W - 36, h: MAP.h };
+  ctx.save();
+  roundRect(ctx, inner.x, inner.y, inner.w, inner.h, 3); ctx.clip();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // 外发光，让线条在卫星图上清晰
+  ctx.beginPath();
+  path.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+  ctx.strokeStyle = 'rgba(0,0,0,.30)'; ctx.lineWidth = 8.5; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 6.2; ctx.stroke();
+  // 速度渐变主体
+  const seg = 4;
+  for (let i = seg; i <= path.length - 1; i += seg){
+    ctx.beginPath();
+    for (let j = i - seg; j <= i; j++){
+      const p = path[Math.min(j, path.length - 1)];
+      j === i - seg ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    }
+    ctx.strokeStyle = speedColor(track.pts[Math.min(i, track.pts.length - 1)].v);
+    ctx.lineWidth = 4.2; ctx.stroke();
+  }
+  // 起终点
+  const s0 = path[0], s1 = path[path.length - 1];
+  ctx.beginPath(); ctx.arc(s0.x, s0.y, 8.5, 0, 7);
+  ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(s0.x, s0.y, 6, 0, 7);
+  ctx.fillStyle = CARD.red; ctx.fill();
+  ctx.restore();
+
+  /* 地图上的叠层控件 */
+  ctx.save();
+  ctx.globalAlpha = .9;
+  // 右侧操作条
+  roundRect(ctx, 573, 352, 56, 152, 6); ctx.fillStyle = 'rgba(90,96,104,.42)'; ctx.fill();
+  const cbtn = (y, draw) => { draw(614, y); };
+  // 全屏
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const corners = [[583, 368, 1, 1], [611, 368, -1, 1], [583, 398, 1, -1], [611, 398, -1, -1]];
+  ctx.beginPath();
+  corners.forEach(([x, y, sx, sy]) => { ctx.moveTo(x + sx * 1, y + sy * 7); ctx.lineTo(x + sx * 1, y + sy * 1); ctx.lineTo(x + sx * 7, y + sy * 1); });
+  ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = FONT(400, 12); ctx.textAlign = 'center';
+  ctx.fillText('全屏', 601, 417);
+  // 投稿
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(589, 430); ctx.lineTo(589, 442); ctx.lineTo(613, 442); ctx.lineTo(613, 430); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(601, 443); ctx.lineTo(601, 429); ctx.moveTo(596, 434); ctx.lineTo(601, 428.5); ctx.lineTo(606, 434); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.fillText('投稿', 601, 460);
+  // 视频
+  ctx.beginPath(); ctx.arc(601, 482, 9.5, 0, 7); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(598, 477.5); ctx.lineTo(606, 482); ctx.lineTo(598, 486.5); ctx.closePath();
+  ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.fillText('视频', 601, 503);
+  ctx.textAlign = 'left';
+  ctx.restore();
+
+  // 左侧地名标注
+  const mapLabel = (text, x, y) => {
+    ctx.save();
+    ctx.font = FONT(700, 15.5);
+    const w = ctx.measureText(text).width + 18;
+    roundRect(ctx, x - w / 2, y - 15, w, 28, 5);
+    ctx.fillStyle = 'rgba(255,255,255,.94)'; ctx.fill();
+    ctx.fillStyle = '#1f2937'; ctx.textAlign = 'center';
+    ctx.fillText(text, x, y + 4.5);
+    ctx.restore();
+  };
+  // 真实地名标注（可选，由 OSM 反查或手动填写）
+  if (o.labTop)  mapLabel(o.labTop,  W * .42, MAP.y + 58);
+  if (o.labMid)  mapLabel(o.labMid,  W * .46, MAP.y + MAP.h * .62);
+  if (o.labBot)  mapLabel(o.labBot,  112, MAP.y + MAP.h * .80);
+  if (o.labBot2) mapLabel(o.labBot2, W - 104, MAP.y + MAP.h * .92);
+  // 比例尺
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(34, MAP.y + MAP.h - 22); ctx.lineTo(34 + 74, MAP.y + MAP.h - 22); ctx.stroke();
+  const mpsPx = 156543.03392 * Math.cos(o.lat * D2R) / Math.pow(2, Math.round(view.zoom));
+  const m500 = 500 / mpsPx;
+  ctx.beginPath(); ctx.moveTo(34, MAP.y + MAP.h - 27); ctx.lineTo(34, MAP.y + MAP.h - 17); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(34 + m500, MAP.y + MAP.h - 27); ctx.lineTo(34 + m500, MAP.y + MAP.h - 17); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.font = '600 12px ui-sans-serif,sans-serif';
+  ctx.fillText('500 m', 40, MAP.y + MAP.h - 4);
+  ctx.restore();
+
+  /* ---- 速度渐变图例 ---- */
+  const LGY = 924;
+  ctx.fillStyle = CARD.sub2; ctx.font = FONT(400, 14);
+  ctx.fillText('慢', 18, LGY + 6);
+  const lx = 46, lw = 46;
+  const lg = ctx.createLinearGradient(lx, 0, lx + lw, 0);
+  lg.addColorStop(0, speedColor(.62)); lg.addColorStop(.55, speedColor(.95)); lg.addColorStop(1, speedColor(1.3));
+  ctx.fillStyle = lg; roundRect(ctx, lx, LGY - 5, lw, 11, 5.5); ctx.fill();
+  ctx.fillStyle = CARD.sub2; ctx.fillText('快', lx + lw + 8, LGY + 6);
+  // 中间的速度点
+  ctx.beginPath(); ctx.arc(lx + lw * .58, LGY - 5, 6.5, 0, 7);
+  ctx.fillStyle = speedColor(1.05); ctx.fill();
+
+  /* ---- 运动数据 ---- */
+  const TITLE = 966;
+  ctx.fillStyle = CARD.ink; ctx.font = FONT(800, 27);
+  ctx.fillText('运动数据', 26, TITLE);
+  const byTag = '查看详情';
+  ctx.font = FONT(600, 17);
+  const bw = ctx.measureText(byTag).width + 34;
+  roundRect(ctx, W - 26 - bw, TITLE - 24, bw, 36, 18); ctx.fillStyle = '#f2f4f6'; ctx.fill();
+  ctx.fillStyle = '#374151'; ctx.textAlign = 'center';
+  ctx.fillText(byTag, W - 26 - bw / 2, TITLE - 1);
+  ctx.textAlign = 'left';
+
+  const R1 = 1020, R2 = 1112;
+  const col = [34, 239, 444];
+  const stat = (x, y, label, value, unit) => {
+    ctx.fillStyle = CARD.sub; ctx.font = FONT(400, 17);
+    ctx.fillText(label, x, y);
+    ctx.fillStyle = CARD.ink; ctx.font = '700 38px "Helvetica Neue",Arial,sans-serif';
+    ctx.fillText(value, x, y + 48);
+    if (unit){
+      const vw = ctx.measureText(value).width;
+      ctx.fillStyle = CARD.sub; ctx.font = FONT(400, 16);
+      ctx.fillText(unit, x + vw + 7, y + 48);
+    }
+  };
+  stat(col[0], R1, '训练时长', fmtDuration(track.durSec));
+  stat(col[1], R1, '运动消耗', String(track.kcal), '千卡');
+  stat(col[2], R1, '步数',     String(track.steps));
+
+  ctx.fillStyle = CARD.ink; ctx.font = '700 38px "Helvetica Neue",Arial,sans-serif';
+  const tot = fmtDuration(track.durSec + (o.gpsLag ?? 2));
+  stat(col[0], R2, '总时长', tot);
+  stat(col[1], R2, '运动负荷', String(track.load));
+  const avg = (track.avgSpeed * 3.6);
+  stat(col[2], R2, '平均速度', avg.toFixed(1), '千米/时');
+
+  const R3 = 1204;
+  stat(col[0], R3, '爬升高度', String(Math.round(track.gain)), '米');
+  stat(col[1], R3, '爬升距离', (track.distM / 1000).toFixed(2), '千米');
+  const maxGrade = (() => {
+    let m = 0;
+    for (let i = 1; i < track.pts.length; i++){
+      const d = track.pts[i].d - track.pts[i - 1].d;
+      if (d > 3) m = Math.max(m, Math.abs(track.pts[i].e - track.pts[i - 1].e) / d);
+    }
+    return m;
+  })();
+  stat(col[2], R3, '最大坡度比', String(Math.round(maxGrade * 100)), '%');
+
+  /* ---- 底部发布条 ---- */
+  if (o.showBar){
+  const BY = 1318;
+    ctx.save();
+    const g = ctx.createLinearGradient(0, BY - 34, 0, H);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.42, 'rgba(255,255,255,.94)'); g.addColorStop(1, '#fff');
+    ctx.fillStyle = g; ctx.fillRect(0, BY - 34, W, H - BY + 34);
+    ctx.restore();
+    const bw2 = W - 96, bx = 48;
+    roundRect(ctx, bx, BY, bw2, 60, 30);
+    ctx.fillStyle = CARD.green; ctx.fill();
+    // 纸飞机
+    ctx.save(); ctx.translate(bx + 40, BY + 31); ctx.rotate(-.25);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(-11, 2.5); ctx.lineTo(13, -9.5); ctx.lineTo(3.5, 11.5); ctx.lineTo(.5, 3.6); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = .75;
+    ctx.beginPath(); ctx.moveTo(.5, 3.6); ctx.lineTo(13, -9.5); ctx.lineTo(1.2, 6.6); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.font = FONT(700, 23); ctx.textAlign = 'center';
+    ctx.fillText('发布动态到社区', bx + bw2 / 2 + 12, BY + 39);
+    ctx.textAlign = 'left';
+  }
+  if (o.noteId){
+    ctx.fillStyle = 'rgba(120,128,138,.55)'; ctx.font = FONT(400, 13); ctx.textAlign = 'center';
+    ctx.fillText('小红书号：' + o.noteId, W - 130, H - 12);
+    ctx.textAlign = 'left';
+  }
+  ctx.restore();
+}
+
+/* ============================================================================
+ * 主流程
+ * ==========================================================================*/
+const $ = id => document.getElementById(id);
+let o = {
+  lat: 28.0210, lng: 120.8150, zoomMode: 'auto', zoom: 15, city: '温州市', basemap: 'google-s',
+  sport: 'hike', distKm: 13.85, durSec: 4 * 3600 + 44 * 60 + 50, seed: '1024',
+  shape: 'loop', climb: 55, user: '',
+  dateText: '2026/04/12', timeText: '08:10 - 12:55', weather: '阴', temp: 18,
+  showPB: true, pbText: '最长时间 · 新纪录', showBar: true, noteId: '',
+  weight: 65, gpsLag: 2, labTop: '', labMid: '', labBot: '', labBot2: ''
+};
+let searchName = '';
+
+function readUI(){
+  o.lat = parseFloat($('lat').value) || 0;
+  o.lng = parseFloat($('lng').value) || 0;
+  o.zoomMode = $('zoomSel').value;
+  o.zoom = parseFloat(o.zoomMode) || o.zoom;
+  o.city = $('city').value.trim() || searchName;
+  o.basemap = $('basemap').value;
+  o.distKm = Math.max(.2, parseFloat($('dist').value) || 5);
+  const dtxt = $('dur').value.trim();
+  o.durSec = /^\d+(:\d+){1,2}$/.test(dtxt)
+    ? dtxt.split(':').map(Number).reduce((a, b) => a * 60 + b, 0) : 0;
+  o.seed = $('seed').value.trim() || '1';
+  o.shape = $('shape').value;
+  o.climb = parseInt($('climb').value, 10);
+  o.sport = $('sportState').value || 'hike';
+  o.user = $('user').value;
+  $('climbV').textContent = o.climb < 33 ? '平缓' : o.climb < 66 ? '中等' : '剧烈';
+  const dv = $('date').value;
+  if (dv){
+    const [y, m, dd] = dv.split('-');
+    o.dateText = `${y}/${m}/${dd}`;
+  }
+  o.startHHMM = $('time').value || '08:10';
+  o.weather = $('wtext').value || '晴';
+  o.temp = parseInt($('wtemp').value, 10) || 20;
+  o.showPB = $('showPB').checked;
+  o.showBar = $('showBar').checked;
+  o.noteId = $('noteId').value.trim();
+  o.pbText = $('pbtxt').value;
+  o.labTop = $('labTop').value.trim();
+  o.labMid = $('labMid').value.trim();
+  o.labBot = $('labBot').value.trim();
+  o.labBot2 = $('labBot2').value.trim();
+}
+
+/* 让轨迹铺满地图框：按需要多少米/像素反推缩放级别 */
+function fitZoom(track, frameW, frameH){
+  const ps = track.pts.map(p => ({
+    x: (p.lng - o.lng) * Math.cos(o.lat * D2R) * R * D2R,
+    y: (p.lat - o.lat) * R * D2R
+  }));
+  const cx = ps.reduce((a, p) => a + p.x, 0) / ps.length;
+  const cy = ps.reduce((a, p) => a + p.y, 0) / ps.length;
+  let rx = 0, ry = 0;
+  ps.forEach(p => { rx = Math.max(rx, Math.abs(p.x - cx)); ry = Math.max(ry, Math.abs(p.y - cy)); });
+  const mpp = Math.max((rx * 2) / frameW, (ry * 2) / frameH, 1e-6);
+  const z = Math.log2(156543.03392 * Math.cos(o.lat * D2R) / mpp);
+  // 保留小数级别：整数取整会让轨迹比目标小 15% 以上
+  return Math.max(12.5, Math.min(18, z));
+}
+
+let renderToken = 0;
+async function render(){
+  readUI();
+  const token = ++renderToken;
+  const px = parseFloat($('px').value) || 3;
+  if (cv.width !== W * px){ cv.width = W * px; cv.height = H * px; }
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.setTransform(px, 0, 0, px, 0, 0);
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+
+  RND = mulberry32(hashSeed(o.seed));
+  const track = buildTrack({ ...o, seedNum: hashSeed(o.seed) });
+
+  const MAP = { y: 392, h: 512 };
+  const useZ = o.zoomMode === 'auto' ? fitZoom(track, (W - 36) * .845, MAP.h * .86) : o.zoom;
+  const view = makeView(o.lat, o.lng, useZ);
+  // 平移视口，让轨迹几何中心落在图框中心
+  const box = { x: 18, y: MAP.y, w: W - 36, h: MAP.h };
+  const c0 = view.toPx({      // 用包围盒中心，保证视觉居中
+    lat: (Math.min(...track.pts.map(p => p.lat)) + Math.max(...track.pts.map(p => p.lat))) / 2,
+    lng: (Math.min(...track.pts.map(p => p.lng)) + Math.max(...track.pts.map(p => p.lng))) / 2
+  });
+  view.w.x += c0.x - box.w / 2 - box.x;      // 让 toPx() 直接给出「图框内坐标」
+  view.w.y += c0.y - box.h / 2 - box.y;
+
+  $('stat').innerHTML = `生成中… 轨迹 <b>${(track.distM / 1000).toFixed(2)} km</b>`;
+  $('pillTile').textContent = '瓦片加载中…';
+  let tileInfo = { ok: 0, total: 0 };
+  try {
+    tileInfo = await drawBasemap(ctx, view, box, o.basemap,
+      (total, ok) => { $('pillTile').textContent = `瓦片 ${ok}/${total}`; });
+  } catch (e) { tileInfo = { ok: 0, total: 0, err: e.message }; }
+  if (token !== renderToken) return;            // 有更新的渲染请求，丢弃本次
+
+  // 结束时间 = 开始时间 + 实际生成时长
+  const t0 = (o.startHHMM || '08:10').split(':').map(Number);
+  const end = t0[0] * 3600 + t0[1] * 60 + track.durSec;
+  const pad = n => String(n).padStart(2, '0');
+  o.timeText = `${o.startHHMM} - ${pad(Math.floor(end / 3600) % 24)}:${pad(Math.floor(end % 3600 / 60))}`;
+  o.lastDur = track.durSec;
+
+  drawCard(o, track, view, tileInfo);
+  cv.dataset.tiles = tileInfo.ok;
+  $('pillTile').textContent = tileInfo.ok
+    ? `瓦片 ${tileInfo.ok}/${tileInfo.total}`
+    : (tileInfo.err ? '瓦片失败' : '瓦片 0');
+  $('pillBase').textContent = '底图：' + (PROVIDERS[o.basemap] ? PROVIDERS[o.basemap].name : '');
+  $('stat').innerHTML = `轨迹 <b>${(track.distM / 1000).toFixed(2)} km</b> · 时长 <b>${fmtDuration(track.durSec)}</b>`
+    + ` · 爬升 <b>${Math.round(track.gain)} m</b> · 步数 <b>${track.steps}</b> · 消耗 <b>${track.kcal} kcal</b>`
+    + ` · 负荷 <b>${track.load}</b> · z${useZ.toFixed(2)}`
+    + (tileInfo.ok === 0 ? ` · <b style="color:#b45309">${tileInfo.err || '瓦片不可用，已回退示意地形'}</b>` : '');
+}
+
+/* ---------- 交互：拖动 / 滚轮缩放 ---------- */
+let drag = null;
+function mapBoxRect(){
+  const r = cv.getBoundingClientRect();
+  return { x: r.left + 18 / W * r.width, y: r.top + 322 / H * r.height,
+           w: (W - 36) / W * r.width, h: 640 / H * r.height, sx: r.width / W, sy: r.height / H };
+}
+cv.addEventListener('pointerdown', e => {
+  const b = mapBoxRect();
+  if (e.clientX < b.x || e.clientX > b.x + b.w || e.clientY < b.y || e.clientY > b.y + b.h) return;
+  drag = { x: e.clientX, y: e.clientY, w: { x: 0, y: 0 } };
+  const scale = 256 * Math.pow(2, o.zoom);
+  drag.w = { x: (o.lng + 180) / 360 * scale, y: (0.5 - mercY(o.lat) / (2 * Math.PI)) * scale };
+  cv.setPointerCapture(e.pointerId);
+  cv.style.cursor = 'grabbing';
+});
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const b = mapBoxRect();
+  const scale = 256 * Math.pow(2, o.zoom);
+  drag.w.x -= (e.clientX - drag.x) / b.sx;
+  drag.w.y -= (e.clientY - drag.y) / b.sy;
+  o.lng = drag.w.x / scale * 360 - 180;
+  o.lat = unMercY((0.5 - drag.w.y / scale) * 2 * Math.PI);
+  $('lat').value = o.lat.toFixed(4); $('lng').value = o.lng.toFixed(4);
+  requestAnimationFrame(render);
+});
+addEventListener('pointerup', () => { drag = null; cv.style.cursor = 'grab'; });
+cv.style.cursor = 'grab';
+cv.addEventListener('wheel', e => {
+  const b = mapBoxRect();
+  if (e.clientX < b.x || e.clientX > b.x + b.w || e.clientY < b.y || e.clientY > b.y + b.h) return;
+  e.preventDefault();
+  const next = Math.max(11, Math.min(18, (parseFloat(o.zoomMode) || o.zoom) + (e.deltaY > 0 ? -1 : 1)));
+  $('zoomSel').value = String(next);
+  render();
+}, { passive: false });
+
+/* ---------- 地名：真实反查（OSM Nominatim / Overpass） ---------- */
+async function reverseOne(lat, lng, radius = 1400, kinds = null){
+  const params = new URLSearchParams({
+    format: 'jsonv2', lat: String(lat), lon: String(lng), zoom: '16', 'accept-language': 'zh'
+  });
+  const r = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`);
+  if (!r.ok) throw new Error('reverse ' + r.status);
+  const j = await r.json();
+  const a = j.address || {};
+  const nm = a.village || a.hamlet || a.town || a.suburb || a.city_district || a.neighbourhood
+          || a.city || a.county || (j.name || '');
+  return nm;
+}
+async function geoNames(){
+  try {
+    const jitter = (n) => (Math.random() - .5) * n;
+    const pts = [
+      [o.lat + .0062, o.lng - .0044],
+      [o.lat - .0030, o.lng + .0012],
+      [o.lat - .0058, o.lng - .0050],
+      [o.lat - .0046, o.lng + .0058]
+    ];
+    const res = await Promise.all(pts.map(([a, b]) => reverseOne(a, b).catch(() => '')));
+    $('labTop').value  = res[0] || '';
+    $('labMid').value  = res[1] || '';
+    $('labBot').value  = res[2] || '';
+    $('labBot2').value = res[3] || '';
+    if (!$('city').value.trim()){ searchName = res[1] || ''; }
+    render();
+    if (!res.some(Boolean)) $('stat').textContent = '反查无结果，可手动填写地名';
+  } catch (e) {
+    $('stat').textContent = '地名反查失败（网络受限）：' + e.message;
+  }
+}
+$('geoNames').addEventListener('click', geoNames);
+
+/* ---------- 搜索 ---------- */
+let searchTimer = null;
+$('q').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = $('q').value.trim();
+  if (q.length < 2){ $('hits').classList.remove('on'); return; }
+  searchTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=zh&q=${encodeURIComponent(q)}`);
+      const list = await r.json();
+      const box = $('hits');
+      box.innerHTML = list.map(it => {
+        const short = it.display_name.split(',').slice(0, 3).join(' · ');
+        return `<div data-lat="${it.lat}" data-lng="${it.lon}" data-n="${short.replace(/"/g, '&quot;')}">${short}</div>`;
+      }).join('') || '<div style="color:#9aa3ad">没有结果</div>';
+      box.classList.add('on');
+    } catch (e) {
+      $('hits').innerHTML = '<div style="color:#b45309">搜索失败（网络受限），请直接拖动地图</div>';
+      $('hits').classList.add('on');
+    }
+  }, 500);
+});
+$('hits').addEventListener('click', e => {
+  const d = e.target.closest('div[data-lat]'); if (!d) return;
+  o.lat = parseFloat(d.dataset.lat); o.lng = parseFloat(d.dataset.lng);
+  searchName = d.dataset.n.split(' · ')[0] || '';
+  $('lat').value = o.lat.toFixed(4); $('lng').value = o.lng.toFixed(4);
+  if (!$('city').value.trim()) $('city').placeholder = searchName;
+  $('q').value = searchName;
+  $('hits').classList.remove('on');
+  render();
+});
+
+/* 分段按钮 */
+$('sport').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...$('sport').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+  const v = b.dataset.v;
+  $('sportState').value = v;
+  $('dist').value = { hike: 13.85, run: 8.04, walk: 4.2, ride: 32.6 }[v] || 10;
+  render();
+});
+$('reroll').addEventListener('click', () => {
+  $('seed').value = Math.floor(Math.random() * 99999).toString();
+  render();
+});
+$('png').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = `运动轨迹_${o.dateText.replace(/\//g, '')}_${(o.seed || 'card')}.png`;
+  a.href = cv.toDataURL('image/png');
+  a.click();
+});
+$('copy').addEventListener('click', async () => {
+  const u = new URL(location.href);
+  Object.entries(o).forEach(([k, v]) => { if (typeof v !== 'object') u.searchParams.set(k, v); });
+  try { await navigator.clipboard.writeText(u.toString()); $('stat').textContent = '链接已复制到剪贴板'; }
+  catch (e) { $('stat').textContent = u.toString(); }
+});
+
+/* 所有输入都触发重绘 */
+['lat','lng','city','basemap','dist','dur','seed','shape','climb','user','date','time',
+ 'wtext','wtemp','showPB','pbtxt','showBar','noteId','px','zoomSel',
+ 'labTop','labMid','labBot','labBot2'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('input',  render);
+  el.addEventListener('change', render);
+});
+
+/* 初始化 */
+(function init(){
+  $('date').value = '2026-04-12';
+  $('time').value = '08:10';
+  render();
+})();
+</script>
+</body>
+</html>
